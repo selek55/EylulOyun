@@ -586,13 +586,47 @@ function returnToMenu() {
 window.addEventListener('keydown', (e) => {
     if (!gameState.isActive) return;
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
-        let minLane = (gameState.level === 1) ? 1 : 0;
-        if (gameState.currentLaneIndex > minLane) gameState.currentLaneIndex--;
+        movePlayerLeft();
     } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
-        let maxLane = (gameState.level === 1) ? 2 : 3;
-        if (gameState.currentLaneIndex < maxLane) gameState.currentLaneIndex++;
+        movePlayerRight();
     }
 });
+
+function movePlayerLeft() {
+    if (!gameState.isActive) return;
+    let minLane = (gameState.level === 1) ? 1 : 0;
+    if (gameState.currentLaneIndex > minLane) gameState.currentLaneIndex--;
+}
+
+function movePlayerRight() {
+    if (!gameState.isActive) return;
+    let maxLane = (gameState.level === 1) ? 2 : 3;
+    if (gameState.currentLaneIndex < maxLane) gameState.currentLaneIndex++;
+}
+
+// Mobile touch buttons
+const btnLeft = document.getElementById('btn-left');
+const btnRight = document.getElementById('btn-right');
+if (btnLeft) {
+    btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); movePlayerLeft(); }, { passive: false });
+    btnLeft.addEventListener('mousedown', movePlayerLeft);
+}
+if (btnRight) {
+    btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); movePlayerRight(); }, { passive: false });
+    btnRight.addEventListener('mousedown', movePlayerRight);
+}
+
+// Swipe support
+let touchStartX = 0;
+window.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+window.addEventListener('touchend', (e) => {
+    if (!gameState.isActive) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) {
+        if (dx < 0) movePlayerLeft();
+        else movePlayerRight();
+    }
+}, { passive: true });
 
 function startGame() {
     // Clear old objects
