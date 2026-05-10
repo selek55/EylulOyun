@@ -7,6 +7,12 @@ const GAME_CONFIG = {
     spawnZ: -150,
 };
 
+const SPEED_PRESETS = [
+    { label: '🐢 Yavaş', base: 0.65 },
+    { label: '🚗 Normal', base: 1.0 },
+    { label: '🚀 Hızlı',  base: 1.55 },
+];
+
 let gameState = {
     isActive: false,
     score: 0,
@@ -14,6 +20,8 @@ let gameState = {
     level: 1, // 1: 2 lanes, 2: 4 lanes, 3: trucks
     currentLaneIndex: 1, // 0 to 3
     speedMultiplier: 1.0,
+    speedBase: 1.0,
+    speedLabel: '🚗 Normal',
     correctAnswer: null,
     correctLane: 0,
     playerName: "Oyuncu"
@@ -376,7 +384,7 @@ function updateGameLogic(delta) {
     window.player.position.x += (targetX - window.player.position.x) * 10 * delta;
 
     // Check collisions and move objects
-    let speed = GAME_CONFIG.roadSpeedInit * gameState.speedMultiplier;
+    let speed = GAME_CONFIG.roadSpeedInit * gameState.speedBase * gameState.speedMultiplier;
     
     for (let i = gameObjects.length - 1; i >= 0; i--) {
         let obj = gameObjects[i];
@@ -488,7 +496,7 @@ function saveHighScore() {
     
     // Only add if score > 0 conceptually, but let's add all attempts
     if (gameState.score > 0) {
-        leaderboard.push({ name: gameState.playerName, score: gameState.score });
+        leaderboard.push({ name: gameState.playerName, score: gameState.score, speed: gameState.speedLabel });
     }
     
     // Sort descending by score
@@ -522,7 +530,8 @@ function updateHighScoreDisplay() {
         else if (idx === 1) medal = "🥈 ";
         else if (idx === 2) medal = "🥉 ";
         
-        li.innerText = `${medal}${entry.name} - ${entry.score} Puan`;
+        const speedTag = entry.speed ? ` (${entry.speed})` : '';
+        li.innerText = `${medal}${entry.name} - ${entry.score} Puan${speedTag}`;
         targetUl.appendChild(li);
     });
 }
@@ -638,15 +647,19 @@ function startGame() {
     const selectedLevel = document.getElementById('start-level') ? parseInt(document.getElementById('start-level').value) : 1;
     const selectedColor = document.getElementById('car-color') ? document.getElementById('car-color').value : '#ff3333';
     const selectedType = document.getElementById('car-type') ? parseInt(document.getElementById('car-type').value) : 0;
-    
+    const selectedSpeedIdx = document.getElementById('speed-setting') ? parseInt(document.getElementById('speed-setting').value) : 1;
+    const preset = SPEED_PRESETS[selectedSpeedIdx] || SPEED_PRESETS[1];
+
     gameState.playerName = document.getElementById('player-name') ? document.getElementById('player-name').value || "Oyuncu" : "Oyuncu";
     gameState.score = 0;
     gameState.lives = GAME_CONFIG.startLives;
     gameState.level = selectedLevel;
-    
+    gameState.speedBase = preset.base;
+    gameState.speedLabel = preset.label;
+
     // Depending on chosen level, start on proper lane
     gameState.currentLaneIndex = (gameState.level === 1) ? 1 : 2;
-    gameState.speedMultiplier = 1.0 + ((gameState.level - 1) * 0.2); 
+    gameState.speedMultiplier = 1.0 + ((gameState.level - 1) * 0.2);
     
     gameState.isActive = true;
     
