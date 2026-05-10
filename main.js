@@ -123,8 +123,8 @@ function toggleNightMode() {
         scene.background = new THREE.Color(skyColor);
         scene.fog = new THREE.Fog(skyColor, 50, 200);
     }
-    if (sceneAmbient)  sceneAmbient.intensity  = isNightMode ? 0.08 : 0.6;
-    if (sceneDirLight) sceneDirLight.intensity  = isNightMode ? 0.15 : 0.8;
+    if (sceneAmbient)  sceneAmbient.intensity  = isNightMode ? 0.25 : 0.6;
+    if (sceneDirLight) sceneDirLight.intensity  = isNightMode ? 0.3  : 0.8;
     applyHeadlightState();
 }
 
@@ -294,22 +294,22 @@ function addHeadlightsToPlayer() {
         window.player.add(mesh);
 
         // Görünür ışık huzmesi (koni)
-        const beamGeo = new THREE.CylinderGeometry(3.5, 0.15, 22, 8, 1, true);
+        const beamGeo = new THREE.CylinderGeometry(5, 0.1, 20, 10, 1, true);
         const beamMat = new THREE.MeshBasicMaterial({
-            color: 0xffffcc,
+            color: 0xffffdd,
             transparent: true,
             opacity: 0,
             side: THREE.BackSide,
             depthWrite: false,
         });
         const beam = new THREE.Mesh(beamGeo, beamMat);
-        beam.rotation.x = Math.PI / 2;       // -Z yönüne döndür
-        beam.position.set(side, 0.8, -13);   // arabanın önünde ortala
+        beam.rotation.x = Math.PI / 2;
+        beam.position.set(side, 0.8, -12);
         beam.name = 'headlight-beam';
         window.player.add(beam);
 
         // SpotLight (yere yönlendirilmiş)
-        const spot = new THREE.SpotLight(0xffffcc, 0, 55, Math.PI * 0.14, 0.35);
+        const spot = new THREE.SpotLight(0xffffcc, 0, 70, Math.PI * 0.16, 0.3);
         spot.position.set(side, 1.5, -2.8);
         spot.name = 'headlight';
         window.player.add(spot);
@@ -330,9 +330,9 @@ function applyHeadlightState() {
     if (!window.player) return;
     const on = isNightMode;
     window.player.children.forEach(c => {
-        if (c.name === 'headlight')      c.intensity = on ? 5 : 0;
+        if (c.name === 'headlight')      c.intensity = on ? 12 : 0;
         if (c.name === 'headlight-mesh') c.material.emissiveIntensity = on ? 1 : 0;
-        if (c.name === 'headlight-beam') c.material.opacity = on ? 0.07 : 0;
+        if (c.name === 'headlight-beam') c.material.opacity = on ? 0.2 : 0;
     });
 }
 
