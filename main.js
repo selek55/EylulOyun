@@ -125,14 +125,7 @@ function toggleNightMode() {
     }
     if (sceneAmbient)  sceneAmbient.intensity  = isNightMode ? 0.08 : 0.6;
     if (sceneDirLight) sceneDirLight.intensity  = isNightMode ? 0.15 : 0.8;
-    if (window.player) {
-        const hlIntensity = isNightMode ? 4 : 0;
-        const emIntensity = isNightMode ? 1 : 0;
-        window.player.children.forEach(c => {
-            if (c.name === 'headlight')      c.intensity = hlIntensity;
-            if (c.name === 'headlight-mesh') c.material.emissiveIntensity = emIntensity;
-        });
-    }
+    applyHeadlightState();
 }
 
 document.getElementById('night-btn').addEventListener('click', toggleNightMode);
@@ -290,25 +283,57 @@ function createPlayer() {
 
 function addHeadlightsToPlayer() {
     if (!window.player) return;
-    const hlGeo = new THREE.SphereGeometry(0.22, 8, 8);
+    const hlGeo = new THREE.SphereGeometry(0.28, 8, 8);
+
     [-1.1, 1.1].forEach(side => {
+        // Parlak küre (far lambası)
         const mat = new THREE.MeshLambertMaterial({ color: 0xffffaa, emissive: 0xffff88, emissiveIntensity: 0 });
         const mesh = new THREE.Mesh(hlGeo, mat);
         mesh.position.set(side, 1.0, -2.6);
         mesh.name = 'headlight-mesh';
         window.player.add(mesh);
 
-        const light = new THREE.PointLight(0xffffcc, 0, 35);
-        light.position.set(side, 1.5, -4);
-        light.name = 'headlight';
-        window.player.add(light);
-    });
-    if (isNightMode) {
-        window.player.children.forEach(c => {
-            if (c.name === 'headlight')      c.intensity = 4;
-            if (c.name === 'headlight-mesh') c.material.emissiveIntensity = 1;
+        // Görünür ışık huzmesi (koni)
+        const beamGeo = new THREE.CylinderGeometry(3.5, 0.15, 22, 8, 1, true);
+        const beamMat = new THREE.MeshBasicMaterial({
+            color: 0xffffcc,
+            transparent: true,
+            opacity: 0,
+            side: THREE.BackSide,
+            depthWrite: false,
         });
-    }
+        const beam = new THREE.Mesh(beamGeo, beamMat);
+        beam.rotation.x = Math.PI / 2;       // -Z yönüne döndür
+        beam.position.set(side, 0.8, -13);   // arabanın önünde ortala
+        beam.name = 'headlight-beam';
+        window.player.add(beam);
+
+        // SpotLight (yere yönlendirilmiş)
+        const spot = new THREE.SpotLight(0xffffcc, 0, 55, Math.PI * 0.14, 0.35);
+        spot.position.set(side, 1.5, -2.8);
+        spot.name = 'headlight';
+        window.player.add(spot);
+
+        // SpotLight hedefi (arabayla birlikte hareket eder)
+        const target = new THREE.Object3D();
+        target.position.set(side * 0.5, -2, -30);
+        target.name = 'headlight-target';
+        window.player.add(target);
+        spot.target = target;
+        scene.add(target); // Three.js hedefin scene'de olmasını gerektirir
+    });
+
+    applyHeadlightState();
+}
+
+function applyHeadlightState() {
+    if (!window.player) return;
+    const on = isNightMode;
+    window.player.children.forEach(c => {
+        if (c.name === 'headlight')      c.intensity = on ? 5 : 0;
+        if (c.name === 'headlight-mesh') c.material.emissiveIntensity = on ? 1 : 0;
+        if (c.name === 'headlight-beam') c.material.opacity = on ? 0.07 : 0;
+    });
 }
 
 // ── Text texture ─────────────────────────────────────────────────────────────
