@@ -536,10 +536,12 @@ function updateGameLogic(delta) {
 
     if (gameState.lives < 5 && Math.random() < 0.2 * delta) {
         const answers = gameObjects.filter(o => o.type === 'answer');
-        // Only spawn cloud when answers are very close to player (almost passed)
+        // Spawn cloud only during an active answer wave (not between waves),
+        // when answers are close to player. Use z=-70 so cloud stays well
+        // ahead of the next answer batch (which spawns at z=-150).
         if (!gameObjects.some(o => o.type === 'cloud') &&
-            (answers.length === 0 || answers.every(a => a.mesh.position.z > -20))) {
-            spawnCloudBonus();
+            answers.length > 0 && answers.every(a => a.mesh.position.z > -25)) {
+            spawnCloudBonus(-70);
         }
     }
 
