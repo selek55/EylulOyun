@@ -271,8 +271,8 @@ button:active {
 /* Night mode button */
 #night-btn {
     position: absolute;
-    top: 0.8rem;
-    right: 0.8rem;
+    bottom: 1rem;
+    right: 1rem;
     z-index: 200;
     font-size: 1.4rem;
     width: 3rem;

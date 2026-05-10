@@ -37,6 +37,7 @@ let gameObjects = [];
 let scene, camera, renderer, clock;
 let isNightMode = false;
 let audioCtx = null;
+let sceneAmbient, sceneDirLight;
 
 const ui = {
     hud: document.getElementById('hud'),
@@ -122,6 +123,16 @@ function toggleNightMode() {
         scene.background = new THREE.Color(skyColor);
         scene.fog = new THREE.Fog(skyColor, 50, 200);
     }
+    if (sceneAmbient)  sceneAmbient.intensity  = isNightMode ? 0.08 : 0.6;
+    if (sceneDirLight) sceneDirLight.intensity  = isNightMode ? 0.15 : 0.8;
+    if (window.player) {
+        const hlIntensity = isNightMode ? 4 : 0;
+        const emIntensity = isNightMode ? 1 : 0;
+        window.player.children.forEach(c => {
+            if (c.name === 'headlight')      c.intensity = hlIntensity;
+            if (c.name === 'headlight-mesh') c.material.emissiveIntensity = emIntensity;
+        });
+    }
 }
 
 document.getElementById('night-btn').addEventListener('click', toggleNightMode);
@@ -142,17 +153,17 @@ function initThreeJS() {
     renderer.shadowMap.enabled = true;
     document.getElementById('game-container').appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    sceneAmbient = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(sceneAmbient);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(20, 50, -20);
-    dirLight.castShadow = true;
-    dirLight.shadow.camera.left = -50;
-    dirLight.shadow.camera.right = 50;
-    dirLight.shadow.camera.top = 100;
-    dirLight.shadow.camera.bottom = -50;
-    scene.add(dirLight);
+    sceneDirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    sceneDirLight.position.set(20, 50, -20);
+    sceneDirLight.castShadow = true;
+    sceneDirLight.shadow.camera.left = -50;
+    sceneDirLight.shadow.camera.right = 50;
+    sceneDirLight.shadow.camera.top = 100;
+    sceneDirLight.shadow.camera.bottom = -50;
+    scene.add(sceneDirLight);
 
     createEnvironment();
     createPlayer();
@@ -273,7 +284,31 @@ function createPlayer() {
     const type = document.getElementById('car-type') ? parseInt(document.getElementById('car-type').value) : 0;
     window.player = buildCar(col, type);
     window.player.position.set(GAME_CONFIG.lanes[gameState.currentLaneIndex], 0, GAME_CONFIG.playerZ);
+    addHeadlightsToPlayer();
     scene.add(window.player);
+}
+
+function addHeadlightsToPlayer() {
+    if (!window.player) return;
+    const hlGeo = new THREE.SphereGeometry(0.22, 8, 8);
+    [-1.1, 1.1].forEach(side => {
+        const mat = new THREE.MeshLambertMaterial({ color: 0xffffaa, emissive: 0xffff88, emissiveIntensity: 0 });
+        const mesh = new THREE.Mesh(hlGeo, mat);
+        mesh.position.set(side, 1.0, -2.6);
+        mesh.name = 'headlight-mesh';
+        window.player.add(mesh);
+
+        const light = new THREE.PointLight(0xffffcc, 0, 35);
+        light.position.set(side, 1.5, -4);
+        light.name = 'headlight';
+        window.player.add(light);
+    });
+    if (isNightMode) {
+        window.player.children.forEach(c => {
+            if (c.name === 'headlight')      c.intensity = 4;
+            if (c.name === 'headlight-mesh') c.material.emissiveIntensity = 1;
+        });
+    }
 }
 
 // ── Text texture ─────────────────────────────────────────────────────────────
@@ -312,7 +347,7 @@ function spawnAnswerVehicle(laneIndex, text, isCorrect, zPos = GAME_CONFIG.spawn
     gameObjects.push({ mesh: group, type: 'answer', isCorrect, answered: false });
 }
 
-function spawnObstacle() {
+function spawnObstacle(zPos = GAME_CONFIG.spawnZ) {
     const availableLanes = (gameState.level === 1) ? [1, 2] : [0, 1, 2, 3];
     const nonCorrectLanes = availableLanes.filter(l => l !== gameState.correctLane);
     const lane = nonCorrectLanes[Math.floor(Math.random() * nonCorrectLanes.length)];
@@ -325,7 +360,7 @@ function spawnObstacle() {
     sprite.position.set(0, 4.5, 0);
     group.add(sprite);
 
-    group.position.set(GAME_CONFIG.lanes[lane], 0, GAME_CONFIG.spawnZ);
+    group.position.set(GAME_CONFIG.lanes[lane], 0, zPos);
     scene.add(group);
     gameObjects.push({ mesh: group, type: 'obstacle', answered: false });
 }
@@ -476,18 +511,10 @@ function updateGameLogic(delta) {
 
     if (gameState.lives < 5 && Math.random() < 0.2 * delta) {
         const answers = gameObjects.filter(o => o.type === 'answer');
+        // Only spawn cloud when answers are very close to player (almost passed)
         if (!gameObjects.some(o => o.type === 'cloud') &&
-            (answers.length === 0 || answers[0].mesh.position.z > -100)) {
+            (answers.length === 0 || answers.every(a => a.mesh.position.z > -20))) {
             spawnCloudBonus();
-        }
-    }
-
-    // Spawn obstacles after 3 correct answers, occasionally between question waves
-    if (gameState.score >= 3 && Math.random() < 0.12 * delta) {
-        const answers = gameObjects.filter(o => o.type === 'answer');
-        const obstacles = gameObjects.filter(o => o.type === 'obstacle');
-        if (obstacles.length < 2 && answers.every(a => a.mesh.position.z > -60)) {
-            spawnObstacle();
         }
     }
 
@@ -530,6 +557,12 @@ function handleCollision(obj) {
     updateHUD();
     gameObjects.forEach(o => { if (o.type === 'answer') scene.remove(o.mesh); });
     gameObjects = gameObjects.filter(o => o.type !== 'answer');
+
+    // Spawn obstacle between this wave and the next, well ahead of new answers
+    if (gameState.score >= 3 && Math.random() < 0.45) {
+        const zPos = -(60 + Math.random() * 40); // -60 to -100, new answers spawn at -150
+        spawnObstacle(zPos);
+    }
 }
 
 // ── HUD / streak ─────────────────────────────────────────────────────────────
@@ -707,6 +740,7 @@ function startGame() {
     if (window.player) scene.remove(window.player);
     window.player = buildCar(selectedColor, selectedType);
     window.player.position.set(GAME_CONFIG.lanes[gameState.currentLaneIndex], 0, GAME_CONFIG.playerZ);
+    addHeadlightsToPlayer();
     scene.add(window.player);
 
     updateHUD();
