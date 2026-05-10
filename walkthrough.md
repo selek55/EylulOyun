@@ -1,36 +1,109 @@
-# 3D Matematik Oyunu - Prototip Tamamlandı
+# Matematik Yolculuğu — Geliştirme Notu
 
-## Yapılanlar
-Belirtilen gereksinimler doğrultusunda oyunun tüm altyapısı ve mekanikleri başarıyla geliştirildi:
+**Yayın URL:** [https://selek55.github.io/EylulOyun/](https://selek55.github.io/EylulOyun/)
+**Hedef:** 10 yaş, 5. sınıf öğrencileri için 3D matematik oyunu
+**Stack:** Three.js r128, Vanilla JS, HTML5/CSS3, Web Audio API
 
-1. **3D Ortam (Three.js):**
-   - Uzayan bir yol, çim zemin ve yolda ilerledikçe iki kenarda beliren ağaçlar oluşturuldu.
-   - Kamera açısı oyuncunun aracının hemen arkasına, uygun bir sürüş hissiyatı verecek şekilde konumlandırıldı.
-2. **Matematik Soru Üreticisi (5. Sınıf Seviyesi):**
-   - **Seviye 1 (Baştan):** 2 Şerit aktif. Temel toplama ve çıkarma işlemleri.
-   - **Seviye 2 (5 Skor sonrası):** 4 Şerit aktif. Çarpanlardan birinin tek haneli olduğu çarpma ve daha büyük sayılarla toplama/çıkarma işlemleri.
-   - **Seviye 3 (12 Skor sonrası):** Kamyonlar ve tırlar devreye girer. Bölme işlemleri ve ileri seviye çarpmalar.
-3. **Araçlar ve Özelleştirme:**
-   - Oyun başında **Oyuncu Adınızı**, **Araba Renginizi** ve **Araba Tipinizi** (Standart, Spor Araba, Kamyon) istediğiniz gibi seçebilirsiniz. Oyuna yansıyan aracınız basit bir kutu değil; seçtiğiniz tipe uygun, gövdesi, camlı kabini ve tekerlekleri olan 3D bir araba modelidir (Örneğin Spor arabanın tekerlekleri daha geniş ve arkasında rüzgarlığı bulunur).
-   - Bu ekranda seçtiğiniz isme göre yapılan skorlar tarayıcı belleğine (localStorage) kaydedilerek **"En Yüksek Skor"** olarak ana menüde gösterilir.
-   - Doğrudan **Zorluk Seviyesi** seçerek (Seviye 1, 2 veya 3) oyuna başlayabilirsiniz. Böylelikle deneyimli oyuncular çok yavaş kısımları atlayabilir.
-   - Seçtiğiniz araba ile sağ/sol **Yön Tuşları** veya **A/D** tuşları ile birbirinden ayrılmış **Geniş Şeritler** arasında yumuşak geçiş yaparsınız. 3 basamaklı büyük cevaplar artık birbirine ve diğer şeritlere girmez.
-   - Doğru cevaplar ve çeldirici cevaplar artık sadece araçların (kabinli arabalar ve 6 tekerlekli uzun kamyonların) üstünde **havada süzülen çok daha net ve büyük yazılar (Sprite)** olarak çıkar. Bu sayede uzaktan okumak çok daha kolaydır.
-4. **Can ve Bonus Sistemi:**
-   - Oyun 5 can (❤️) ile başlar. Yanlış cevaba çarpıldığında 1 can eksilir, ekran kırmızı yanıp söner.
-   - Rastgele aralıklarla şeritlerde beyaz, **bulut şeklinde can bonusları** çıkar. Çarpıldığında canınızı 5'i geçmeyecek şekilde +1 arttırır ve skor yeşil yanar.
-5. **Kullanıcı Arayüzü (UI):**
-   - Çocuklar için okunaklı büyük fontlar (`Nunito`) kullanıldı.
-   - Başlangıç ekranı, Oyun İçi Bilgi Ekranı (soru, can, skor), Oyun Bitti ekranı ve Kazanma ekranı eklendi.
+---
 
-## Nasıl Test Edilir?
-Oyun tamamen tarayıcı tabanlıdır ve herhangi bir kuruluma ihtiyaç duymaz.
-Test etmek için takım klasörünüzdeki [index.html](file:///d:/repos/selek55/EylulOyun/index.html) dosyasına çift tıklayarak modern bir tarayıcıda (Chrome, Edge vb.) açmanız yeterlidir:
+## Nasıl Oynanır?
 
-[d:\repos\selek55\EylulOyun\index.html](file:///d:/repos/selek55/EylulOyun/index.html)
+- Oyuncu arabası ← → / A D tuşları veya mobil dokunmatik butonlarla hareket eder
+- Ekranda bir matematik sorusu belirir; doğru cevabı taşıyan araca çarpılır
+- 20 doğru cevap → **kazanma**; 5 can → **oyun bitti**
+- Yanlış araca veya kırmızı ✖ engel araca çarpmak can kaybettirir
+- 3 üst üste doğru → **seri bonusu** (+1 puan ekstra, 🔥 göstergesi)
+- Beyaz bulutlara çarpmak can kazandırır (maks. 5)
 
-- Açıldıktan sonra "Oyuna Başla" butonuna tıklayın.
-- Yon tuşlarını kullanarak doğru cevap veren arabanın bulunduğu şeride geçin!
-- Bulutları toplayıp canınızı arttırın. 20 soruya doğru cevap verip oyunu kazanın.
+---
 
-İyi oyunlar!
+## Özellikler
+
+| Özellik | Detay |
+| --- | --- |
+| Hız Ayarı | Yavaş / Normal / Hızlı — oyun boyunca **sabit** kalır |
+| Konu Seçimi | Karışık / Toplama / Çıkarma / Çarpma / Bölme |
+| Araba Özelleştirme | Renk (color picker), Tip (Standart/Spor/Kamyon), İsim |
+| Seviye | 1 (2 şerit) / 2 (4 şerit) / 3 (Zor) |
+| Gece Modu | Three.js ışık yoğunluğu + CSS sınıfı + görünür far konileri |
+| Ses Efektleri | Web Audio API ile procedural (doğru/yanlış/can/kazanma) |
+| Liderlik Tablosu | LocalStorage, ilk 5 skor |
+| Hak Bulutu | Can < 5 iken aktif dalgada z=-70'te spawn |
+| Engel Araçlar | Score ≥ 3'ten sonra %45 ihtimalle, z=-60 ile -100 arası |
+| Konfeti | Kazanma ekranında CSS animasyonu |
+| Paylaş | Sonucu panoya kopyalar |
+| Mobil | Dokunmatik ← → butonlar, responsive CSS |
+
+---
+
+## Önemli Teknik Kararlar
+
+### Spawn Mesafeleri
+
+```text
+Yeni cevap batch'ı  →  z = -150
+Hak bulutu          →  z = -70   (aralarında 80 birim boşluk)
+Engel araçlar       →  z = -60 ile -100 (handleCollision içinde)
+Oyuncu              →  z = 0
+Despawn noktası     →  z = +8
+```
+
+Bulutun ve engellerin cevap araçlarının üzerine binmemesi için bu ayrım korunmalı.
+
+### Hız
+
+```js
+SPEED_PRESETS = [0.045, 0.075, 0.115]  // Yavaş / Normal / Hızlı
+```
+
+`gameState.speedBase` başlangıçta set edilir, oyun içinde **güncellenmez**.
+
+### Gece Modu Far
+
+SpotLight (intensity=12) + CylinderGeometry koni (BackSide, opacity=0.2) birlikte kullanılır.
+Sadece SpotLight ile ışığın arabadan çıktığı görsel olarak belli olmaz.
+
+### Ses
+
+```js
+playSound('correct' | 'wrong' | 'life' | 'win' | 'gameover')
+```
+
+Harici dosya yok; Web Audio API ile tamamen procedural üretilir.
+
+---
+
+## Dosya Yapısı
+
+```text
+EylulOyun/
+├── index.html     — UI overlay'leri, HUD, özelleştirme formu
+├── style.css      — Night mode, streak animasyonu, confetti, responsive
+├── main.js        — Tüm oyun mantığı (Three.js scene, spawn, collision, audio)
+└── walkthrough.md — Bu dosya
+```
+
+---
+
+## Geliştirme Geçmişi
+
+1. Temel 3D oyun yapısı (Three.js sahne, araçlar, sorular)
+2. GitHub Pages'e yayınlama → [selek55.github.io/EylulOyun](https://selek55.github.io/EylulOyun/)
+3. Mobil uyumluluk + dokunmatik kontroller
+4. 3 seviyeli sabit hız ayarı (Yavaş/Normal/Hızlı)
+5. Konu seçimi (varsayılan: karışık)
+6. Engel araçlar, seri bonusu, oyun sonu istatistikleri
+7. Ses efektleri (Web Audio API, procedural)
+8. Gece modu + görünür far konileri (SpotLight + CylinderGeometry)
+9. Konfeti, paylaş butonu, liderlik tablosu
+10. Spawn mesafesi düzeltmeleri (bulut / engel ↔ cevap çakışması giderildi)
+
+---
+
+## Test
+
+Oyun tarayıcı tabanlıdır, kurulum gerekmez.
+Lokal test: `index.html` dosyasını Chrome/Edge ile aç.
+Online: [selek55.github.io/EylulOyun](https://selek55.github.io/EylulOyun/)
+
+İyi oyunlar! 🎮

@@ -37,33 +37,39 @@
 
         <!-- Start Screen -->
         <div id="start-screen" class="overlay">
-            <h1>Matematik Yolculuğu</h1>
-            <p>10 Yaş - 5. Sınıf Seviyesi</p>
-            <div id="leaderboard-container">
-                <h3>🏆 Liderlik Tablosu (İlk 5) 🏆</h3>
-                <ol id="leaderboard-list">
-                    <li>Henüz skor yok</li>
-                </ol>
+            <div class="start-header">
+                <h1>🚗 Matematik Yolculuğu</h1>
+                <p class="start-subtitle">5. Sınıf · Matematik Oyunu</p>
             </div>
 
-            <div class="instructions">
-                <p>Matematik sorularını çöz ve doğru cevabı taşıyan araca çarp!</p>
-                <p>Yön Tuşları (← →) veya A/D ile arabanı kontrol et.</p>
-                <p>Yanlış araca çarparsan veya kırmızı engele girersen canın gider.</p>
-                <p>20 doğru cevap ver, oyunu kazan!</p>
+            <div class="info-row">
+                <div id="leaderboard-container">
+                    <h3>🏆 Liderlik Tablosu</h3>
+                    <ol id="leaderboard-list">
+                        <li>Henüz skor yok</li>
+                    </ol>
+                </div>
+
+                <div class="instructions">
+                    <div class="instr-item">🧮 Matematik sorusunu çöz, doğru cevabı taşıyan araca çarp!</div>
+                    <div class="instr-item">🎮 ← → yön tuşları, A/D veya dokunmatik butonlar</div>
+                    <div class="instr-item">❤️ 5 canın var — yanlış araca çarpma!</div>
+                    <div class="instr-item">🔥 Üst üste 3 doğru → seri bonusu!</div>
+                    <div class="instr-item">🏁 20 doğru cevap ver, oyunu kazan!</div>
+                </div>
             </div>
 
             <div class="customization">
                 <div class="option-group">
-                    <label>Oyuncu Adı:</label>
+                    <label>👤 Oyuncu Adı</label>
                     <input type="text" id="player-name" placeholder="Adınız" value="Oyuncu">
                 </div>
                 <div class="option-group">
-                    <label>Araba Rengi:</label>
+                    <label>🎨 Araba Rengi</label>
                     <input type="color" id="car-color" value="#ff3333">
                 </div>
                 <div class="option-group">
-                    <label>Araba Tipi:</label>
+                    <label>🚘 Araba Tipi</label>
                     <select id="car-type">
                         <option value="0">Standart</option>
                         <option value="2">Spor Araba</option>
@@ -72,15 +78,15 @@
                 </div>
                 <div class="row-break"></div>
                 <div class="option-group">
-                    <label>Seviye:</label>
+                    <label>🎯 Seviye</label>
                     <select id="start-level">
-                        <option value="1">Seviye 1 (2 Şerit)</option>
-                        <option value="2">Seviye 2 (4 Şerit)</option>
-                        <option value="3">Seviye 3 (Zor)</option>
+                        <option value="1">⭐ Kolay (2 Şerit)</option>
+                        <option value="2">⭐⭐ Orta (4 Şerit)</option>
+                        <option value="3">⭐⭐⭐ Zor</option>
                     </select>
                 </div>
                 <div class="option-group">
-                    <label>Hız Ayarı:</label>
+                    <label>⚡ Hız</label>
                     <select id="speed-setting">
                         <option value="0">🐢 Yavaş</option>
                         <option value="1" selected>🚗 Normal</option>
@@ -88,7 +94,7 @@
                     </select>
                 </div>
                 <div class="option-group">
-                    <label>Konu:</label>
+                    <label>📚 Konu</label>
                     <select id="topic-setting">
                         <option value="mixed">🔀 Karışık</option>
                         <option value="add">➕ Toplama</option>
@@ -99,7 +105,7 @@
                 </div>
             </div>
 
-            <button id="start-btn">Oyuna Başla</button>
+            <button id="start-btn">🎮 Oyuna Başla!</button>
         </div>
 
         <!-- Game Over Screen -->
