@@ -453,7 +453,6 @@ function updateGameLogic(delta) {
 function handleCollision(obj) {
     if (obj.isCorrect) {
         gameState.score++;
-        gameState.speedMultiplier += 0.05; // speed up slightly
 
         // Level up logic
         if (gameState.score >= 5) gameState.level = 2; // 4 lanes
