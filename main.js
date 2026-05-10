@@ -2,7 +2,7 @@ const GAME_CONFIG = {
     totalQuestions: 20,
     startLives: 5,
     roadSpeedInit: 40,
-    lanes: [-9, -3, 3, 9], // Widened lanes for better separation
+    lanes: [-9, -3, 3, 9],
     playerZ: 10,
     spawnZ: -150,
 };
@@ -13,22 +13,30 @@ const SPEED_PRESETS = [
     { label: '🚀 Hızlı',  base: 1.55 },
 ];
 
+const TOPIC_LABELS = { add: '➕', sub: '➖', mul: '✖️', div: '➗', mixed: '🔀' };
+
 let gameState = {
     isActive: false,
     score: 0,
     lives: GAME_CONFIG.startLives,
-    level: 1, // 1: 2 lanes, 2: 4 lanes, 3: trucks
-    currentLaneIndex: 1, // 0 to 3
+    level: 1,
+    currentLaneIndex: 1,
     speedMultiplier: 1.0,
     speedBase: 1.0,
     speedLabel: '🚗 Normal',
+    topic: 'mixed',
+    streak: 0,
+    wrongCount: 0,
+    startTime: null,
     correctAnswer: null,
     correctLane: 0,
-    playerName: "Oyuncu"
+    playerName: 'Oyuncu',
 };
 
-let gameObjects = []; // Stores moving objects: { mesh, type, isCorrect }
+let gameObjects = [];
 let scene, camera, renderer, clock;
+let isNightMode = false;
+let audioCtx = null;
 
 const ui = {
     hud: document.getElementById('hud'),
@@ -43,6 +51,82 @@ const ui = {
     restartBtn: document.getElementById('restart-btn'),
     winRestartBtn: document.getElementById('win-restart-btn'),
 };
+
+// ── Sound ────────────────────────────────────────────────────────────────────
+
+function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+}
+
+function playSound(type) {
+    try {
+        const ctx = getAudioCtx();
+        if (type === 'correct') {
+            [{ f: 523, t: 0 }, { f: 659, t: 0.12 }].forEach(({ f, t }) => {
+                const o = ctx.createOscillator(), g = ctx.createGain();
+                o.connect(g); g.connect(ctx.destination);
+                o.frequency.value = f;
+                g.gain.setValueAtTime(0.25, ctx.currentTime + t);
+                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.2);
+                o.start(ctx.currentTime + t);
+                o.stop(ctx.currentTime + t + 0.22);
+            });
+        } else if (type === 'streak') {
+            [523, 659, 784, 1047].forEach((f, i) => {
+                const o = ctx.createOscillator(), g = ctx.createGain();
+                o.connect(g); g.connect(ctx.destination);
+                o.frequency.value = f;
+                const t = i * 0.09;
+                g.gain.setValueAtTime(0.2, ctx.currentTime + t);
+                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.18);
+                o.start(ctx.currentTime + t);
+                o.stop(ctx.currentTime + t + 0.2);
+            });
+        } else if (type === 'wrong') {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            o.type = 'sawtooth';
+            o.connect(g); g.connect(ctx.destination);
+            o.frequency.setValueAtTime(220, ctx.currentTime);
+            o.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
+            g.gain.setValueAtTime(0.3, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+            o.start(); o.stop(ctx.currentTime + 0.32);
+        } else if (type === 'obstacle') {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            o.type = 'square';
+            o.connect(g); g.connect(ctx.destination);
+            o.frequency.value = 80;
+            g.gain.setValueAtTime(0.4, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+            o.start(); o.stop(ctx.currentTime + 0.27);
+        } else if (type === 'cloud') {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            o.frequency.value = 880;
+            o.connect(g); g.connect(ctx.destination);
+            g.gain.setValueAtTime(0.2, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+            o.start(); o.stop(ctx.currentTime + 0.22);
+        }
+    } catch (e) {}
+}
+
+// ── Night mode ───────────────────────────────────────────────────────────────
+
+function toggleNightMode() {
+    isNightMode = !isNightMode;
+    document.body.classList.toggle('night-mode', isNightMode);
+    document.getElementById('night-btn').textContent = isNightMode ? '☀️' : '🌙';
+    if (scene) {
+        const skyColor = isNightMode ? 0x0d1117 : 0x87CEEB;
+        scene.background = new THREE.Color(skyColor);
+        scene.fog = new THREE.Fog(skyColor, 50, 200);
+    }
+}
+
+document.getElementById('night-btn').addEventListener('click', toggleNightMode);
+
+// ── Three.js init ────────────────────────────────────────────────────────────
 
 function initThreeJS() {
     scene = new THREE.Scene();
@@ -85,7 +169,7 @@ function createEnvironment() {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const roadGeo = new THREE.PlaneGeometry(32, 500); // Widened road
+    const roadGeo = new THREE.PlaneGeometry(32, 500);
     const roadMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
     const road = new THREE.Mesh(roadGeo, roadMat);
     road.rotation.x = -Math.PI / 2;
@@ -94,20 +178,18 @@ function createEnvironment() {
     scene.add(road);
 
     spawnInitialTrees();
-    updateHighScoreDisplay(); // Show initial high score
+    updateHighScoreDisplay();
 }
 
 function spawnInitialTrees() {
-    for(let i=0; i<20; i++) {
-        spawnTree(Math.random() * -300);
-    }
+    for (let i = 0; i < 20; i++) spawnTree(Math.random() * -300);
 }
 
 function spawnTree(zPos = GAME_CONFIG.spawnZ) {
     const trunkGeo = new THREE.CylinderGeometry(0.5, 0.5, 3);
     const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    
+
     const leavesGeo = new THREE.ConeGeometry(2.5, 6, 8);
     const leavesMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
     const leaves = new THREE.Mesh(leavesGeo, leavesMat);
@@ -116,92 +198,69 @@ function spawnTree(zPos = GAME_CONFIG.spawnZ) {
     const tree = new THREE.Group();
     tree.add(trunk);
     tree.add(leaves);
-    
-    // Spawn further outwards due to wider road
+
     const sign = Math.random() > 0.5 ? 1 : -1;
     tree.position.set((18 + Math.random() * 10) * sign, 1.5, zPos);
-    
+
     scene.add(tree);
     gameObjects.push({ mesh: tree, type: 'tree' });
 }
 
+// ── Car builder ──────────────────────────────────────────────────────────────
+
 function buildCar(colorHex, carType = 0) {
-    // carType: 0 = Standard, 1 = Truck, 2 = Sport
     const isTruck = (carType === 1);
     const isSport = (carType === 2);
-    
     const group = new THREE.Group();
-    
-    // Chassis
+
     const chassisLen = isTruck ? 10 : 5;
     const chassisWidth = isSport ? 3.4 : 3;
     const chassisHeight = isSport ? 0.8 : 1;
-    
+
     const chassisGeo = new THREE.BoxGeometry(chassisWidth, chassisHeight, chassisLen);
     const chassisMat = new THREE.MeshLambertMaterial({ color: colorHex });
     const chassis = new THREE.Mesh(chassisGeo, chassisMat);
-    chassis.position.y = chassisHeight / 2; // Offset above ground level
+    chassis.position.y = chassisHeight / 2;
     chassis.castShadow = true;
     chassis.receiveShadow = true;
-    chassis.name = "chassis"; // For color updates later
-    chassis.userData.isSport = isSport; 
+    chassis.name = 'chassis';
     group.add(chassis);
-    
-    // Cabin (Windows)
+
     const cabinLen = isTruck ? 3 : 2.5;
-    const cabinWidth = isSport ? 2.8 : 2.8;
     const cabinHeight = isSport ? 0.8 : 1.2;
-    
-    const cabinGeo = new THREE.BoxGeometry(cabinWidth, cabinHeight, cabinLen);
-    const cabinMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee }); 
+    const cabinGeo = new THREE.BoxGeometry(2.8, cabinHeight, cabinLen);
+    const cabinMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
     const cabin = new THREE.Mesh(cabinGeo, cabinMat);
-    cabin.position.y = chassisHeight + (cabinHeight / 2);
-    
-    if (isTruck) {
-        cabin.position.z = -3.5; // Front of the truck
-    } else if (isSport) {
-        cabin.position.z = 0; // Middle
-    } else {
-        cabin.position.z = 0.5; // Slightly back for normal car
-    }
+    cabin.position.y = chassisHeight + cabinHeight / 2;
+    cabin.position.z = isTruck ? -3.5 : isSport ? 0 : 0.5;
     cabin.castShadow = true;
     group.add(cabin);
-    
-    // Spoiler for sport
+
     if (isSport) {
-        const spoilerGeo = new THREE.BoxGeometry(3.2, 0.2, 0.6);
         const spoilerMat = new THREE.MeshLambertMaterial({ color: colorHex });
-        const spoiler = new THREE.Mesh(spoilerGeo, spoilerMat);
+        const spoiler = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.2, 0.6), spoilerMat);
         spoiler.position.set(0, chassisHeight + 0.6, 2.2);
-        spoiler.name = "spoiler";
-        
-        // Spoiler stands
         const standGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
-        const s1 = new THREE.Mesh(standGeo, spoilerMat); s1.position.set(-1, chassisHeight + 0.3, 2.2); s1.name = "stand";
-        const s2 = new THREE.Mesh(standGeo, spoilerMat); s2.position.set(1, chassisHeight + 0.3, 2.2); s2.name = "stand";
-        
-        group.add(spoiler); group.add(s1); group.add(s2);
+        const s1 = new THREE.Mesh(standGeo, spoilerMat); s1.position.set(-1, chassisHeight + 0.3, 2.2);
+        const s2 = new THREE.Mesh(standGeo, spoilerMat); s2.position.set( 1, chassisHeight + 0.3, 2.2);
+        group.add(spoiler, s1, s2);
     }
 
-    // Wheels
     const wheelGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.5, 16);
     const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-    
-    const wheelPositions = isTruck 
-        ? [ [-1.6, 0.6, 4], [1.6, 0.6, 4], [-1.6, 0.6, -2], [1.6, 0.6, -2], [-1.6, 0.6, -4], [1.6, 0.6, -4] ] 
-        : [ [-1.6, 0.6, 1.5], [1.6, 0.6, 1.5], [-1.6, 0.6, -1.5], [1.6, 0.6, -1.5] ];
+    const wheelPositions = isTruck
+        ? [[-1.6,0.6,4],[1.6,0.6,4],[-1.6,0.6,-2],[1.6,0.6,-2],[-1.6,0.6,-4],[1.6,0.6,-4]]
+        : [[-1.6,0.6,1.5],[1.6,0.6,1.5],[-1.6,0.6,-1.5],[1.6,0.6,-1.5]];
 
     wheelPositions.forEach(pos => {
         const wheel = new THREE.Mesh(wheelGeo, wheelMat);
         wheel.rotation.z = Math.PI / 2;
-        
-        if (isSport) {
-            wheel.position.set(pos[0] * 1.1, pos[1]*0.9, pos[2]); // Wider stance, lower
-            wheel.scale.set(0.9, 1.2, 0.9); // Wider tires
-        } else {
-            wheel.position.set(pos[0], pos[1], pos[2]);
-        }
-        
+        wheel.position.set(
+            isSport ? pos[0] * 1.1 : pos[0],
+            isSport ? pos[1] * 0.9 : pos[1],
+            pos[2]
+        );
+        if (isSport) wheel.scale.set(0.9, 1.2, 0.9);
         wheel.castShadow = true;
         group.add(wheel);
     });
@@ -210,167 +269,142 @@ function buildCar(colorHex, carType = 0) {
 }
 
 function createPlayer() {
-    const initialColor = document.getElementById('car-color') ? document.getElementById('car-color').value : '#ff3333';
-    const initialType = document.getElementById('car-type') ? parseInt(document.getElementById('car-type').value) : 0;
-    
-    window.player = buildCar(initialColor, initialType);
+    const col = document.getElementById('car-color') ? document.getElementById('car-color').value : '#ff3333';
+    const type = document.getElementById('car-type') ? parseInt(document.getElementById('car-type').value) : 0;
+    window.player = buildCar(col, type);
     window.player.position.set(GAME_CONFIG.lanes[gameState.currentLaneIndex], 0, GAME_CONFIG.playerZ);
     scene.add(window.player);
 }
 
+// ── Text texture ─────────────────────────────────────────────────────────────
+
 function createTextTexture(text) {
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 256;
+    canvas.width = 512; canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    
     ctx.clearRect(0, 0, 512, 256);
-    
     ctx.font = 'bold 160px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
     ctx.lineWidth = 15;
     ctx.strokeStyle = '#000000';
     ctx.strokeText(text, 256, 128);
-    
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(text, 256, 128);
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    return texture;
+    return new THREE.CanvasTexture(canvas);
 }
+
+// ── Spawn functions ──────────────────────────────────────────────────────────
 
 function spawnAnswerVehicle(laneIndex, text, isCorrect, zPos = GAME_CONFIG.spawnZ) {
     const isTruck = gameState.level >= 3;
     const col = isTruck ? 0x3333ff : 0xffff33;
-
     const group = new THREE.Group();
+    group.add(buildCar(col, isTruck ? 1 : 0));
 
-    // Use carType = 1 for trucks, 0 for regular cars for answer vehicles
-    const carType = isTruck ? 1 : 0;
-    const carModel = buildCar(col, carType);
-    group.add(carModel);
-    
-    // Floating Text Sprite
-    const textTexture = createTextTexture(text);
-    const spriteMaterial = new THREE.SpriteMaterial({ map: textTexture, transparent: true });
-    const sprite = new THREE.Sprite(spriteMaterial);
-    sprite.scale.set(8, 4, 1); 
-    sprite.position.set(0, 5, 0); // Float above the car/truck
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTextTexture(text), transparent: true }));
+    sprite.scale.set(8, 4, 1);
+    sprite.position.set(0, 5, 0);
     group.add(sprite);
 
     group.position.set(GAME_CONFIG.lanes[laneIndex], 0, zPos);
-    
     scene.add(group);
-    gameObjects.push({ mesh: group, type: 'answer', isCorrect: isCorrect, answered: false });
+    gameObjects.push({ mesh: group, type: 'answer', isCorrect, answered: false });
+}
+
+function spawnObstacle() {
+    const availableLanes = (gameState.level === 1) ? [1, 2] : [0, 1, 2, 3];
+    const nonCorrectLanes = availableLanes.filter(l => l !== gameState.correctLane);
+    const lane = nonCorrectLanes[Math.floor(Math.random() * nonCorrectLanes.length)];
+
+    const group = new THREE.Group();
+    group.add(buildCar(0x880000, 0));
+
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTextTexture('✖'), transparent: true }));
+    sprite.scale.set(4, 2, 1);
+    sprite.position.set(0, 4.5, 0);
+    group.add(sprite);
+
+    group.position.set(GAME_CONFIG.lanes[lane], 0, GAME_CONFIG.spawnZ);
+    scene.add(group);
+    gameObjects.push({ mesh: group, type: 'obstacle', answered: false });
 }
 
 function spawnCloudBonus(zPos = GAME_CONFIG.spawnZ) {
     const group = new THREE.Group();
     const geo = new THREE.SphereGeometry(2, 8, 8);
     const mat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
-    
-    // Cloud consists of a few overlapping spheres
     const s1 = new THREE.Mesh(geo, mat);
-    const s2 = new THREE.Mesh(geo, mat); s2.position.set(1.5, 0, 0); s2.scale.set(0.8, 0.8, 0.8);
-    const s3 = new THREE.Mesh(geo, mat); s3.position.set(-1.5, 0, 0); s3.scale.set(0.8, 0.8, 0.8);
-    const s4 = new THREE.Mesh(geo, mat); s4.position.set(0, 1, 0); s4.scale.set(0.9, 0.9, 0.9);
-    
-    group.add(s1); group.add(s2); group.add(s3); group.add(s4);
-    
-    // Pick an empty lane
-    let availableLanes = (gameState.level === 1) ? [1, 2] : [0, 1, 2, 3];
-    let lane = availableLanes[Math.floor(Math.random() * availableLanes.length)];
-    
+    const s2 = new THREE.Mesh(geo, mat); s2.position.set( 1.5, 0, 0); s2.scale.setScalar(0.8);
+    const s3 = new THREE.Mesh(geo, mat); s3.position.set(-1.5, 0, 0); s3.scale.setScalar(0.8);
+    const s4 = new THREE.Mesh(geo, mat); s4.position.set(0, 1, 0);    s4.scale.setScalar(0.9);
+    group.add(s1, s2, s3, s4);
+
+    const availableLanes = (gameState.level === 1) ? [1, 2] : [0, 1, 2, 3];
+    const lane = availableLanes[Math.floor(Math.random() * availableLanes.length)];
     group.position.set(GAME_CONFIG.lanes[lane], 2, zPos);
     scene.add(group);
-    
     gameObjects.push({ mesh: group, type: 'cloud', answered: false });
 }
 
+// ── Question generation ──────────────────────────────────────────────────────
+
 function generateQuestion() {
-    let num1, num2, operation, answer, questionText;
-    
-    if (gameState.level === 1) {
-        // Simple add/sub
-        const ops = ['+', '-'];
-        operation = ops[Math.floor(Math.random() * ops.length)];
-        if (operation === '+') {
-            num1 = Math.floor(Math.sortedRandom() * 40) + 10;
-            num2 = Math.floor(Math.random() * 40) + 10;
-            answer = num1 + num2;
-        } else {
-            num1 = Math.floor(Math.random() * 50) + 20;
-            num2 = Math.floor(Math.random() * (num1 - 10)) + 5;
-            answer = num1 - num2;
-        }
-    } else if (gameState.level === 2) {
-        // Multi/Add
-        const ops = ['+', '*', '-'];
-        operation = ops[Math.floor(Math.random() * ops.length)];
-        if (operation === '*') {
-            num1 = Math.floor(Math.random() * 9) + 2;
-            num2 = Math.floor(Math.random() * 9) + 2;
-            answer = num1 * num2;
-        } else if (operation === '+') {
-            num1 = Math.floor(Math.random() * 100) + 20;
-            num2 = Math.floor(Math.random() * 100) + 20;
-            answer = num1 + num2;
-        } else {
-            num1 = Math.floor(Math.random() * 100) + 50;
-            num2 = Math.floor(Math.random() * (num1 - 10)) + 10;
-            answer = num1 - num2;
-        }
-    } else {
-        // Trucks level: Division and larger mult
-        const ops = ['/', '*'];
-        operation = ops[Math.floor(Math.random() * ops.length)];
-        if (operation === '/') {
-            num2 = Math.floor(Math.random() * 8) + 2;
-            answer = Math.floor(Math.random() * 30) + 5;
-            num1 = num2 * answer;
-        } else {
-            num1 = Math.floor(Math.random() * 15) + 5;
-            num2 = Math.floor(Math.random() * 9) + 2;
-            answer = num1 * num2;
-        }
+    let num1, num2, operation, answer;
+    const topic = gameState.topic;
+
+    if (topic === 'add')      operation = '+';
+    else if (topic === 'sub') operation = '-';
+    else if (topic === 'mul') operation = '*';
+    else if (topic === 'div') operation = '/';
+    else {
+        if (gameState.level === 1)      operation = ['+','-'][Math.floor(Math.random()*2)];
+        else if (gameState.level === 2) operation = ['+','*','-'][Math.floor(Math.random()*3)];
+        else                            operation = ['/','*'][Math.floor(Math.random()*2)];
     }
 
-    questionText = `${num1} ${operation} ${num2} = ?`;
-    ui.questionBox.innerText = questionText;
+    if (operation === '+') {
+        num1 = Math.floor(Math.random() * (gameState.level === 1 ? 40 : 100)) + (gameState.level === 1 ? 10 : 20);
+        num2 = Math.floor(Math.random() * (gameState.level === 1 ? 40 : 100)) + (gameState.level === 1 ? 10 : 20);
+        answer = num1 + num2;
+    } else if (operation === '-') {
+        num1 = Math.floor(Math.random() * (gameState.level === 1 ? 50 : 100)) + (gameState.level === 1 ? 20 : 50);
+        num2 = Math.floor(Math.random() * (num1 - 10)) + (gameState.level === 1 ? 5 : 10);
+        answer = num1 - num2;
+    } else if (operation === '*') {
+        num1 = Math.floor(Math.random() * (gameState.level <= 2 ? 9 : 15)) + (gameState.level <= 2 ? 2 : 5);
+        num2 = Math.floor(Math.random() * 9) + 2;
+        answer = num1 * num2;
+    } else {
+        num2 = Math.floor(Math.random() * 8) + 2;
+        answer = Math.floor(Math.random() * 30) + 5;
+        num1 = num2 * answer;
+    }
+
+    const displayOp = operation === '*' ? '×' : operation === '/' ? '÷' : operation;
+    ui.questionBox.innerText = `${num1} ${displayOp} ${num2} = ?`;
     gameState.correctAnswer = answer;
 
-    // Determine available lanes based on level
-    let availableLanes = (gameState.level === 1) ? [1, 2] : [0, 1, 2, 3];
+    const availableLanes = (gameState.level === 1) ? [1, 2] : [0, 1, 2, 3];
     gameState.correctLane = availableLanes[Math.floor(Math.random() * availableLanes.length)];
 
-    // Generate distractors
-    let distractors = new Set();
+    const distractors = new Set();
     while (distractors.size < availableLanes.length - 1) {
-        let diff = Math.floor(Math.random() * 10) + 1;
-        let sign = Math.random() > 0.5 ? 1 : -1;
-        let dist = answer + (diff * sign);
-        if (dist > 0 && dist !== answer) {
-            distractors.add(dist);
-        }
+        const diff = Math.floor(Math.random() * 10) + 1;
+        const dist = answer + diff * (Math.random() > 0.5 ? 1 : -1);
+        if (dist > 0 && dist !== answer) distractors.add(dist);
     }
-    let distractorArray = Array.from(distractors);
+    const distractorArray = Array.from(distractors);
 
-    // Spawn vehicles
     availableLanes.forEach(lane => {
-        if (lane === gameState.correctLane) {
-            spawnAnswerVehicle(lane, answer.toString(), true);
-        } else {
-            let fakeAns = distractorArray.pop();
-            spawnAnswerVehicle(lane, fakeAns.toString(), false);
-        }
+        if (lane === gameState.correctLane) spawnAnswerVehicle(lane, answer.toString(), true);
+        else spawnAnswerVehicle(lane, distractorArray.pop().toString(), false);
     });
 
-    // Also spawn some trees
-    spawnTree();
-    spawnTree();
+    spawnTree(); spawnTree();
 }
+
+// ── Window resize ────────────────────────────────────────────────────────────
 
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -378,291 +412,298 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// ── Game loop ────────────────────────────────────────────────────────────────
+
 function updateGameLogic(delta) {
-    // Player lateral movement
     const targetX = GAME_CONFIG.lanes[gameState.currentLaneIndex];
     window.player.position.x += (targetX - window.player.position.x) * 10 * delta;
 
-    // Check collisions and move objects
-    let speed = GAME_CONFIG.roadSpeedInit * gameState.speedBase * gameState.speedMultiplier;
-    
+    const speed = GAME_CONFIG.roadSpeedInit * gameState.speedBase * gameState.speedMultiplier;
+
     for (let i = gameObjects.length - 1; i >= 0; i--) {
-        let obj = gameObjects[i];
+        const obj = gameObjects[i];
         obj.mesh.position.z += speed * delta;
 
-        // Collision detection for answers
         if (obj.type === 'answer' && !obj.answered) {
-            // Check bounding box roughly
             if (Math.abs(obj.mesh.position.z - window.player.position.z) < 5 &&
                 Math.abs(obj.mesh.position.x - window.player.position.x) < 2) {
-                
                 obj.answered = true;
                 handleCollision(obj);
             }
         }
 
-        // Collision detection for cloud bonus
-        if (obj.type === 'cloud' && !obj.answered) {
+        if (obj.type === 'obstacle' && !obj.answered) {
             if (Math.abs(obj.mesh.position.z - window.player.position.z) < 5 &&
                 Math.abs(obj.mesh.position.x - window.player.position.x) < 2) {
-                
                 obj.answered = true;
-                gameState.lives = Math.min(5, gameState.lives + 1);
+                gameState.lives--;
+                gameState.streak = 0;
+                gameState.wrongCount++;
+                updateStreakDisplay();
+                playSound('obstacle');
+                ui.questionBox.style.borderColor = '#f44336';
+                setTimeout(() => ui.questionBox.style.borderColor = '#FFC107', 500);
                 updateHUD();
-                
-                // Visual feedback for cloud (making score text flash green)
-                ui.scoreText.parentElement.style.color = "#4CAF50";
-                setTimeout(() => ui.scoreText.parentElement.style.color = "white", 500);
-                
                 scene.remove(obj.mesh);
                 gameObjects.splice(i, 1);
-                continue; // Move to next object
+                if (gameState.lives <= 0) triggerGameOver();
+                continue;
             }
         }
 
-        // Remove if passed camera
+        if (obj.type === 'cloud' && !obj.answered) {
+            if (Math.abs(obj.mesh.position.z - window.player.position.z) < 5 &&
+                Math.abs(obj.mesh.position.x - window.player.position.x) < 2) {
+                obj.answered = true;
+                gameState.lives = Math.min(5, gameState.lives + 1);
+                playSound('cloud');
+                updateHUD();
+                ui.scoreText.parentElement.style.color = '#4CAF50';
+                setTimeout(() => ui.scoreText.parentElement.style.color = 'white', 500);
+                scene.remove(obj.mesh);
+                gameObjects.splice(i, 1);
+                continue;
+            }
+        }
+
         if (obj.mesh.position.z > camera.position.z + 10) {
             scene.remove(obj.mesh);
             gameObjects.splice(i, 1);
         }
     }
 
-    // Spawn trees constantly
-    if (Math.random() < 5 * delta) {
-        spawnTree();
-    }
-    
-    // Spawn Cloud Bonus rarely
+    if (Math.random() < 5 * delta) spawnTree();
+
     if (gameState.lives < 5 && Math.random() < 0.2 * delta) {
-        const existingClouds = gameObjects.filter(o => o.type === 'cloud');
-        // also check if distance to questions is large enough to not overlap
         const answers = gameObjects.filter(o => o.type === 'answer');
-        if (existingClouds.length === 0 && (answers.length === 0 || answers[0].mesh.position.z > -100)) {
+        if (!gameObjects.some(o => o.type === 'cloud') &&
+            (answers.length === 0 || answers[0].mesh.position.z > -100)) {
             spawnCloudBonus();
         }
     }
 
-    // Spawn next question if last vehicles are close to player
-    // Or if there are no answer vehicles
-    const answers = gameObjects.filter(o => o.type === 'answer');
-    if (answers.length === 0) {
+    // Spawn obstacles after 3 correct answers, occasionally between question waves
+    if (gameState.score >= 3 && Math.random() < 0.12 * delta) {
+        const answers = gameObjects.filter(o => o.type === 'answer');
+        const obstacles = gameObjects.filter(o => o.type === 'obstacle');
+        if (obstacles.length < 2 && answers.every(a => a.mesh.position.z > -60)) {
+            spawnObstacle();
+        }
+    }
+
+    if (!gameObjects.some(o => o.type === 'answer')) {
         generateQuestion();
     }
 }
 
+// ── Collision handling ───────────────────────────────────────────────────────
+
 function handleCollision(obj) {
     if (obj.isCorrect) {
         gameState.score++;
+        gameState.streak++;
 
-        // Level up logic
-        if (gameState.score >= 5) gameState.level = 2; // 4 lanes
-        if (gameState.score >= 12) gameState.level = 3; // Trucks
+        playSound(gameState.streak >= 3 ? 'streak' : 'correct');
+        updateStreakDisplay();
 
-        // Flash green
-        ui.questionBox.style.borderColor = "#4CAF50";
-        setTimeout(() => ui.questionBox.style.borderColor = "#FFC107", 500);
+        if (gameState.score >= 5)  gameState.level = 2;
+        if (gameState.score >= 12) gameState.level = 3;
 
-        if (gameState.score >= GAME_CONFIG.totalQuestions) {
-            triggerWin();
-        }
+        ui.questionBox.style.borderColor = '#4CAF50';
+        setTimeout(() => ui.questionBox.style.borderColor = '#FFC107', 500);
 
+        if (gameState.score >= GAME_CONFIG.totalQuestions) { triggerWin(); return; }
     } else {
         gameState.lives--;
-        // Flash red
-        ui.questionBox.style.borderColor = "#f44336";
-        setTimeout(() => ui.questionBox.style.borderColor = "#FFC107", 500);
+        gameState.streak = 0;
+        gameState.wrongCount++;
 
-        if (gameState.lives <= 0) {
-            triggerGameOver();
-        }
+        playSound('wrong');
+        updateStreakDisplay();
+
+        ui.questionBox.style.borderColor = '#f44336';
+        setTimeout(() => ui.questionBox.style.borderColor = '#FFC107', 500);
+
+        if (gameState.lives <= 0) { triggerGameOver(); return; }
     }
-    updateHUD();
 
-    // Remove all current answer objects so new ones spawn
-    gameObjects.forEach(o => {
-        if (o.type === 'answer') {
-            scene.remove(o.mesh);
-        }
-    });
+    updateHUD();
+    gameObjects.forEach(o => { if (o.type === 'answer') scene.remove(o.mesh); });
     gameObjects = gameObjects.filter(o => o.type !== 'answer');
 }
 
-function saveHighScore() {
-    let leaderboard = [];
-    try {
-        leaderboard = JSON.parse(localStorage.getItem('mathGameLeaderboard')) || [];
-    } catch(e) { /* ignore parse errors */ }
-    
-    // Only add if score > 0 conceptually, but let's add all attempts
-    if (gameState.score > 0) {
-        leaderboard.push({ name: gameState.playerName, score: gameState.score, speed: gameState.speedLabel });
+// ── HUD / streak ─────────────────────────────────────────────────────────────
+
+function updateHUD() {
+    ui.scoreText.innerText = gameState.score;
+    let hearts = '';
+    for (let i = 0; i < gameState.lives; i++) hearts += '❤️';
+    ui.livesText.innerText = hearts;
+}
+
+function updateStreakDisplay() {
+    const display = document.getElementById('streak-display');
+    const countEl = document.getElementById('streak-count');
+    if (gameState.streak >= 3) {
+        display.classList.remove('hidden');
+        countEl.textContent = gameState.streak;
+    } else {
+        display.classList.add('hidden');
     }
-    
-    // Sort descending by score
-    leaderboard.sort((a, b) => b.score - a.score);
-    // Keep top 5
-    leaderboard = leaderboard.slice(0, 5);
-    
-    localStorage.setItem('mathGameLeaderboard', JSON.stringify(leaderboard));
+}
+
+// ── Leaderboard ──────────────────────────────────────────────────────────────
+
+function saveHighScore() {
+    let lb = [];
+    try { lb = JSON.parse(localStorage.getItem('mathGameLeaderboard')) || []; } catch (e) {}
+    if (gameState.score > 0) {
+        lb.push({
+            name: gameState.playerName,
+            score: gameState.score,
+            speed: gameState.speedLabel,
+            topic: gameState.topic,
+        });
+    }
+    lb.sort((a, b) => b.score - a.score);
+    lb = lb.slice(0, 5);
+    localStorage.setItem('mathGameLeaderboard', JSON.stringify(lb));
     updateHighScoreDisplay();
 }
 
 function updateHighScoreDisplay() {
-    let leaderboard = [];
-    try {
-        leaderboard = JSON.parse(localStorage.getItem('mathGameLeaderboard')) || [];
-    } catch(e) {}
-    
-    const targetUl = document.getElementById('leaderboard-list');
-    if (!targetUl) return;
-    
-    if (leaderboard.length === 0) {
-        targetUl.innerHTML = "<li>Henüz skor yok</li>";
-        return;
-    }
-    
-    targetUl.innerHTML = "";
-    leaderboard.forEach((entry, idx) => {
+    let lb = [];
+    try { lb = JSON.parse(localStorage.getItem('mathGameLeaderboard')) || []; } catch (e) {}
+    const list = document.getElementById('leaderboard-list');
+    if (!list) return;
+    if (lb.length === 0) { list.innerHTML = '<li>Henüz skor yok</li>'; return; }
+    list.innerHTML = '';
+    lb.forEach((entry, idx) => {
         const li = document.createElement('li');
-        let medal = "";
-        if (idx === 0) medal = "🥇 ";
-        else if (idx === 1) medal = "🥈 ";
-        else if (idx === 2) medal = "🥉 ";
-        
-        const speedTag = entry.speed ? ` (${entry.speed})` : '';
+        const medal = ['🥇 ', '🥈 ', '🥉 '][idx] || '';
+        const topicTag = entry.topic && entry.topic !== 'mixed' ? ` ${TOPIC_LABELS[entry.topic] || ''}` : '';
+        const speedTag = entry.speed ? ` (${entry.speed}${topicTag})` : '';
         li.innerText = `${medal}${entry.name} - ${entry.score} Puan${speedTag}`;
-        targetUl.appendChild(li);
+        list.appendChild(li);
     });
+}
+
+// ── Win / Game Over ──────────────────────────────────────────────────────────
+
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function triggerWin() {
     gameState.isActive = false;
+    const elapsed = Math.floor((Date.now() - gameState.startTime) / 1000);
     saveHighScore();
+    document.getElementById('win-stat-correct').textContent = gameState.score;
+    document.getElementById('win-stat-wrong').textContent = gameState.wrongCount;
+    document.getElementById('win-stat-time').textContent = formatTime(elapsed);
     ui.hud.classList.add('hidden');
     ui.winScreen.classList.remove('hidden');
+    triggerConfetti();
 }
 
 function triggerGameOver() {
     gameState.isActive = false;
+    const elapsed = Math.floor((Date.now() - gameState.startTime) / 1000);
     saveHighScore();
-    ui.hud.classList.add('hidden');
     ui.finalScoreText.innerText = gameState.score;
+    document.getElementById('stat-correct').textContent = gameState.score;
+    document.getElementById('stat-wrong').textContent = gameState.wrongCount;
+    document.getElementById('stat-time').textContent = formatTime(elapsed);
+    ui.hud.classList.add('hidden');
     ui.gameOverScreen.classList.remove('hidden');
 }
 
-function animate() {
-    requestAnimationFrame(animate);
-    const delta = clock.getDelta();
-    if (gameState.isActive) {
-        updateGameLogic(delta);
+// ── Confetti ─────────────────────────────────────────────────────────────────
+
+function triggerConfetti() {
+    const container = document.getElementById('confetti-container');
+    container.innerHTML = '';
+    const colors = ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#ff922b','#cc5de8','#f06595'];
+    for (let i = 0; i < 100; i++) {
+        const piece = document.createElement('div');
+        piece.className = 'confetti-piece';
+        piece.style.left = Math.random() * 100 + 'vw';
+        piece.style.animationDuration = (2 + Math.random() * 2.5) + 's';
+        piece.style.animationDelay = (Math.random() * 1.8) + 's';
+        piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+        container.appendChild(piece);
     }
-    if (renderer && scene && camera) {
-        renderer.render(scene, camera);
+    setTimeout(() => { container.innerHTML = ''; }, 6000);
+}
+
+// ── Share ────────────────────────────────────────────────────────────────────
+
+function shareResult() {
+    const elapsed = gameState.startTime ? Math.floor((Date.now() - gameState.startTime) / 1000) : 0;
+    const topicName = { add:'Toplama', sub:'Çıkarma', mul:'Çarpma', div:'Bölme', mixed:'Karışık' }[gameState.topic] || '';
+    const text =
+        `🎮 Matematik Yolculuğu\n` +
+        `👤 ${gameState.playerName}: ${gameState.score}/20 puan\n` +
+        `🏎 Hız: ${gameState.speedLabel} | 📚 Konu: ${topicName}\n` +
+        `✅ Doğru: ${gameState.score}  ❌ Yanlış: ${gameState.wrongCount}  ⏱ ${formatTime(elapsed)}\n\n` +
+        `🔗 https://selek55.github.io/EylulOyun/`;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text)
+            .then(() => alert('Sonuç panoya kopyalandı! 📋'))
+            .catch(() => prompt('Kopyala:', text));
+    } else {
+        prompt('Kopyala:', text);
     }
 }
 
-// Math.random sorted trick polyfill
-Math.sortedRandom = function() {
-    return Math.random();
-};
-
-ui.startBtn.addEventListener('click', startGame);
-ui.restartBtn.addEventListener('click', startGame);
-ui.winRestartBtn.addEventListener('click', startGame);
-
-const menuBtn1 = document.getElementById('menu-btn1');
-const menuBtn2 = document.getElementById('menu-btn2');
-if (menuBtn1) menuBtn1.addEventListener('click', returnToMenu);
-if (menuBtn2) menuBtn2.addEventListener('click', returnToMenu);
+// ── Menu / restart ───────────────────────────────────────────────────────────
 
 function returnToMenu() {
     ui.gameOverScreen.classList.add('hidden');
     ui.winScreen.classList.add('hidden');
     ui.hud.classList.add('hidden');
     ui.startScreen.classList.remove('hidden');
-    
+    document.getElementById('confetti-container').innerHTML = '';
     gameObjects.forEach(o => scene.remove(o.mesh));
     gameObjects = [];
     spawnInitialTrees();
-    
-    if (window.player) {
-        scene.remove(window.player);
-        window.player = null;
-    }
+    if (window.player) { scene.remove(window.player); window.player = null; }
 }
 
-window.addEventListener('keydown', (e) => {
-    if (!gameState.isActive) return;
-    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
-        movePlayerLeft();
-    } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
-        movePlayerRight();
-    }
-});
-
-function movePlayerLeft() {
-    if (!gameState.isActive) return;
-    let minLane = (gameState.level === 1) ? 1 : 0;
-    if (gameState.currentLaneIndex > minLane) gameState.currentLaneIndex--;
-}
-
-function movePlayerRight() {
-    if (!gameState.isActive) return;
-    let maxLane = (gameState.level === 1) ? 2 : 3;
-    if (gameState.currentLaneIndex < maxLane) gameState.currentLaneIndex++;
-}
-
-// Mobile touch buttons
-const btnLeft = document.getElementById('btn-left');
-const btnRight = document.getElementById('btn-right');
-if (btnLeft) {
-    btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); movePlayerLeft(); }, { passive: false });
-    btnLeft.addEventListener('mousedown', movePlayerLeft);
-}
-if (btnRight) {
-    btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); movePlayerRight(); }, { passive: false });
-    btnRight.addEventListener('mousedown', movePlayerRight);
-}
-
-// Swipe support
-let touchStartX = 0;
-window.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
-window.addEventListener('touchend', (e) => {
-    if (!gameState.isActive) return;
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(dx) > 40) {
-        if (dx < 0) movePlayerLeft();
-        else movePlayerRight();
-    }
-}, { passive: true });
+// ── Start game ───────────────────────────────────────────────────────────────
 
 function startGame() {
-    // Clear old objects
     gameObjects.forEach(o => scene.remove(o.mesh));
     gameObjects = [];
-    spawnInitialTrees(); // Respawn trees
+    spawnInitialTrees();
+    document.getElementById('confetti-container').innerHTML = '';
 
-    // Determine initial selected options
-    const selectedLevel = document.getElementById('start-level') ? parseInt(document.getElementById('start-level').value) : 1;
-    const selectedColor = document.getElementById('car-color') ? document.getElementById('car-color').value : '#ff3333';
-    const selectedType = document.getElementById('car-type') ? parseInt(document.getElementById('car-type').value) : 0;
-    const selectedSpeedIdx = document.getElementById('speed-setting') ? parseInt(document.getElementById('speed-setting').value) : 1;
-    const preset = SPEED_PRESETS[selectedSpeedIdx] || SPEED_PRESETS[1];
+    const selectedLevel    = parseInt(document.getElementById('start-level')?.value  ?? 1);
+    const selectedColor    = document.getElementById('car-color')?.value ?? '#ff3333';
+    const selectedType     = parseInt(document.getElementById('car-type')?.value     ?? 0);
+    const selectedSpeedIdx = parseInt(document.getElementById('speed-setting')?.value ?? 1);
+    const selectedTopic    = document.getElementById('topic-setting')?.value ?? 'mixed';
+    const preset = SPEED_PRESETS[selectedSpeedIdx] ?? SPEED_PRESETS[1];
 
-    gameState.playerName = document.getElementById('player-name') ? document.getElementById('player-name').value || "Oyuncu" : "Oyuncu";
-    gameState.score = 0;
-    gameState.lives = GAME_CONFIG.startLives;
-    gameState.level = selectedLevel;
-    gameState.speedBase = preset.base;
-    gameState.speedLabel = preset.label;
-
-    // Depending on chosen level, start on proper lane
-    gameState.currentLaneIndex = (gameState.level === 1) ? 1 : 2;
-    gameState.speedMultiplier = 1.0 + ((gameState.level - 1) * 0.2);
-    
+    gameState.playerName    = document.getElementById('player-name')?.value || 'Oyuncu';
+    gameState.score         = 0;
+    gameState.lives         = GAME_CONFIG.startLives;
+    gameState.level         = selectedLevel;
+    gameState.speedBase     = preset.base;
+    gameState.speedLabel    = preset.label;
+    gameState.topic         = selectedTopic;
+    gameState.streak        = 0;
+    gameState.wrongCount    = 0;
+    gameState.startTime     = Date.now();
+    gameState.currentLaneIndex = gameState.level === 1 ? 1 : 2;
+    gameState.speedMultiplier  = 1.0 + (gameState.level - 1) * 0.2;
     gameState.isActive = true;
-    
-    // Rebuild player car completely to adopt new type
+
+    updateStreakDisplay();
+
     if (window.player) scene.remove(window.player);
     window.player = buildCar(selectedColor, selectedType);
     window.player.position.set(GAME_CONFIG.lanes[gameState.currentLaneIndex], 0, GAME_CONFIG.playerZ);
@@ -675,12 +716,60 @@ function startGame() {
     ui.hud.classList.remove('hidden');
 }
 
-function updateHUD() {
-    ui.scoreText.innerText = gameState.score;
-    let hearts = '';
-    for(let i=0; i<gameState.lives; i++) hearts += '❤️';
-    ui.livesText.innerText = hearts;
+// ── Animate ──────────────────────────────────────────────────────────────────
+
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    if (gameState.isActive) updateGameLogic(delta);
+    if (renderer && scene && camera) renderer.render(scene, camera);
 }
+
+// ── Event listeners ──────────────────────────────────────────────────────────
+
+ui.startBtn.addEventListener('click', startGame);
+ui.restartBtn.addEventListener('click', startGame);
+ui.winRestartBtn.addEventListener('click', startGame);
+
+document.getElementById('menu-btn1')?.addEventListener('click', returnToMenu);
+document.getElementById('menu-btn2')?.addEventListener('click', returnToMenu);
+document.getElementById('share-btn1')?.addEventListener('click', shareResult);
+document.getElementById('share-btn2')?.addEventListener('click', shareResult);
+
+window.addEventListener('keydown', (e) => {
+    if (!gameState.isActive) return;
+    if (e.key === 'ArrowLeft'  || e.key === 'a' || e.key === 'A') movePlayerLeft();
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') movePlayerRight();
+});
+
+function movePlayerLeft() {
+    if (!gameState.isActive) return;
+    const min = gameState.level === 1 ? 1 : 0;
+    if (gameState.currentLaneIndex > min) gameState.currentLaneIndex--;
+}
+
+function movePlayerRight() {
+    if (!gameState.isActive) return;
+    const max = gameState.level === 1 ? 2 : 3;
+    if (gameState.currentLaneIndex < max) gameState.currentLaneIndex++;
+}
+
+const btnLeft  = document.getElementById('btn-left');
+const btnRight = document.getElementById('btn-right');
+btnLeft?.addEventListener('touchstart',  (e) => { e.preventDefault(); movePlayerLeft();  }, { passive: false });
+btnLeft?.addEventListener('mousedown',   movePlayerLeft);
+btnRight?.addEventListener('touchstart', (e) => { e.preventDefault(); movePlayerRight(); }, { passive: false });
+btnRight?.addEventListener('mousedown',  movePlayerRight);
+
+let touchStartX = 0;
+window.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+window.addEventListener('touchend', (e) => {
+    if (!gameState.isActive) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) { dx < 0 ? movePlayerLeft() : movePlayerRight(); }
+}, { passive: true });
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
 
 initThreeJS();
 animate();

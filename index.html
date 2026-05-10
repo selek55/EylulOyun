@@ -9,14 +9,19 @@
 </head>
 <body>
     <div id="game-container">
-        <!-- Three.js Canvas will be injected here -->
-        
+        <!-- Confetti layer -->
+        <div id="confetti-container"></div>
+
+        <!-- Night mode toggle -->
+        <button id="night-btn" title="Gece/Gündüz modu">🌙</button>
+
         <!-- HUD (Heads Up Display) -->
         <div id="hud" class="hidden">
             <div class="top-bar">
                 <div id="lives-container">
                     Can: <span id="lives">❤️❤️❤️❤️❤️</span>
                 </div>
+                <div id="streak-display" class="hidden">🔥 <span id="streak-count">0</span> Seri!</div>
                 <div id="score-container">
                     Skor: <span id="score">0</span> / 20
                 </div>
@@ -40,21 +45,19 @@
                     <li>Henüz skor yok</li>
                 </ol>
             </div>
-            
+
             <div class="instructions">
                 <p>Matematik sorularını çöz ve doğru cevabı taşıyan araca çarp!</p>
-                <p>Yon Tuşları (← →) veya A/D ile arabanı kontrol et.</p>
-                <p>Yanlış araca çarparsan canın gider.</p>
+                <p>Yön Tuşları (← →) veya A/D ile arabanı kontrol et.</p>
+                <p>Yanlış araca çarparsan veya kırmızı engele girersen canın gider.</p>
                 <p>20 doğru cevap ver, oyunu kazan!</p>
             </div>
-            
+
             <div class="customization">
-                <!-- Name and Type -->
                 <div class="option-group">
                     <label>Oyuncu Adı:</label>
                     <input type="text" id="player-name" placeholder="Adınız" value="Oyuncu">
                 </div>
-                <!-- Color and Level -->
                 <div class="option-group">
                     <label>Araba Rengi:</label>
                     <input type="color" id="car-color" value="#ff3333">
@@ -83,6 +86,16 @@
                         <option value="2">🚀 Hızlı</option>
                     </select>
                 </div>
+                <div class="option-group">
+                    <label>Konu:</label>
+                    <select id="topic-setting">
+                        <option value="mixed">🔀 Karışık</option>
+                        <option value="add">➕ Toplama</option>
+                        <option value="sub">➖ Çıkarma</option>
+                        <option value="mul">✖️ Çarpma</option>
+                        <option value="div">➗ Bölme</option>
+                    </select>
+                </div>
             </div>
 
             <button id="start-btn">Oyuna Başla</button>
@@ -92,25 +105,36 @@
         <div id="game-over-screen" class="overlay hidden">
             <h1 class="red-text">Oyun Bitti!</h1>
             <p>Canın kalmadı.</p>
+            <div class="stats-box">
+                <span>✅ <strong id="stat-correct">0</strong></span>
+                <span>❌ <strong id="stat-wrong">0</strong></span>
+                <span>⏱ <strong id="stat-time">0:00</strong></span>
+            </div>
             <p>Skor: <span id="final-score">0</span>/20</p>
-            <div style="display:flex; gap:1rem;">
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; justify-content:center;">
                 <button id="restart-btn" class="btn-danger">Tekrar Oyna</button>
-                <button id="menu-btn1" style="background-color:#2196F3; box-shadow:0 6px 0 #1976D2;">Ana Menü</button>
+                <button id="menu-btn1" class="btn-blue">Ana Menü</button>
+                <button id="share-btn1" class="btn-share">📋 Paylaş</button>
             </div>
         </div>
 
         <!-- Win Screen -->
         <div id="win-screen" class="overlay hidden">
-            <h1 class="green-text">Tebrikler Kazandın!</h1>
+            <h1 class="green-text">Tebrikler Kazandın! 🎉</h1>
             <p>Tüm soruları doğru bildin!</p>
-            <div style="display:flex; gap:1rem;">
-                <button id="win-restart-btn" style="background-color:#4CAF50;">Yeni Oyun</button>
-                <button id="menu-btn2" style="background-color:#2196F3; box-shadow:0 6px 0 #1976D2;">Ana Menü</button>
+            <div class="stats-box">
+                <span>✅ <strong id="win-stat-correct">0</strong></span>
+                <span>❌ <strong id="win-stat-wrong">0</strong></span>
+                <span>⏱ <strong id="win-stat-time">0:00</strong></span>
+            </div>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; justify-content:center;">
+                <button id="win-restart-btn" style="background-color:#4CAF50; box-shadow:0 6px 0 #388E3C, 0 10px 15px rgba(0,0,0,0.2);">Yeni Oyun</button>
+                <button id="menu-btn2" class="btn-blue">Ana Menü</button>
+                <button id="share-btn2" class="btn-share">📋 Paylaş</button>
             </div>
         </div>
     </div>
 
-    <!-- Three.js and Game Logic -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="main.js"></script>
 </body>
